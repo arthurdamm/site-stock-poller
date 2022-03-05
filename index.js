@@ -1,9 +1,11 @@
 const open = require("open");
 const puppeteer = require("puppeteer");
-const player = require('play-sound')(opts = {})
 const axios = require('axios')
 
 const {sites, pollFrequency, playAlert, webhookURL} = require("./configs");
+const { log, err } = require('./util');
+
+
 var sitesFound = 0;
 
 function initializeSites() {
@@ -15,18 +17,11 @@ function initializeSites() {
 
 function siteFound(site) {
     // open the site
-    open("https://www.paypal.com/paypalme/sahirkarani");
     open(site.url);
 
     // alert the user in console
-    const message = `\nFound the correct keywords to include/exclude on site: ${site.url}\n` + 
-    `Consider donating to me! Already opened the paypal link as well :)\n`
-    console.log(message);
-
-    // play the sound
-    if (playAlert){
-        player.play('./alert.mp3');
-    }
+    const message = `\nFound the correct keywords to include/exclude on site: ${site.url}\n`
+    log(message);
 
     // hit webhook if exists
     if (webhookURL) {
@@ -35,7 +30,7 @@ function siteFound(site) {
 }
 
 async function pollSiteAndCheckForKeywords(browser, site) {
-    console.log(`Polling ${site.url} for the ${site.tryCount} time`);
+    log(`Polling ${site.url} for the ${site.tryCount} time`);
 
     const context = await browser.createIncognitoBrowserContext();
     const page = await context.newPage();
@@ -57,6 +52,8 @@ async function pollSiteAndCheckForKeywords(browser, site) {
                 return 1;
             }
         }
+    } else {
+        err(`Received code ${responseStatus} for ${site}`)
     }
     context.close();
     return 0;
@@ -64,7 +61,7 @@ async function pollSiteAndCheckForKeywords(browser, site) {
 
 
 async function runSitePolling(browser) {
-    console.log('\n\n*******Running next set of polling*******\n')
+    log('\n\n*******Running next set of polling*******\n')
     await Promise.all(sites.map(async (site) => {
         if (site.run) {
             sitesFound += await pollSiteAndCheckForKeywords(browser, site);
@@ -72,14 +69,22 @@ async function runSitePolling(browser) {
      }));
 
     if (sitesFound < sites.length) {
-        setTimeout(runSitePolling, pollFrequency, browser);
-    } else {
-        console.log('congrats all your sites are found :)\n you can exit this program by hitting ctrl + C on your computer');
+        setTimeout(runSitePolling, pollFrequency + getRandomInt(1000*60), browser);
     }
 }
 
+function getRandomInt(max) {
+    return Math.floor(Math.random() * max);
+}
+
+
+
 (async function run(){
-    initializeSites();
-    const browser = await puppeteer.launch({headless:true});
-    runSitePolling(browser);
+    try {
+        initializeSites();
+        const browser = await puppeteer.launch({headless:true});
+        runSitePolling(browser);
+    } catch (e) {
+        err(e.message);
+    }
 })()
